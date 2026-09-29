@@ -5,21 +5,20 @@
 #       pinho@pucrs.br
 # ************************************************
 
-
+import math
 from OpenGL.GL import *
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
 from Ponto import *
-
-from Ponto import Ponto
-from ListaDeCoresRGB import defineCor
+from ListaDeCoresRGB import defineCor, Red, Blue, Green, Black
 
 
 """ Classe Triangulo """
 class Triangulo:
     def __init__(self, *args):
         self.Vertices = [Ponto(), Ponto(), Ponto()]
-        self.Envelope = [Ponto(), Ponto()]
+        self.Envelope = [Ponto(), Ponto()]  # AABB min e max
+        self.OBBVertices = []                # Vértices do retângulo OBB
         self.cor = 0
 
         # Construtor que recebe somente a cor
@@ -45,6 +44,7 @@ class Triangulo:
             raise TypeError("Parametros invalidos para o construtor de Triangulo")
 
         self.CalculaEnvelope()
+        self.CalculaOBB()
 
     # **********************************************************************
     # CalculaEnvelope()
@@ -52,12 +52,69 @@ class Triangulo:
     #      Envelope[0] = ponto minimo e Envelope[1] = ponto maximo.
     # **********************************************************************
     def CalculaEnvelope(self):
-        self.Envelope[0] = self.Vertices[0]
-        self.Envelope[1] = self.Vertices[0]
+        self.Envelope[0] = Ponto(self.Vertices[0].x, self.Vertices[0].y, self.Vertices[0].z)
+        self.Envelope[1] = Ponto(self.Vertices[0].x, self.Vertices[0].y, self.Vertices[0].z)
 
         for i in range(1, 3):
             self.Envelope[0] = ObtemMinimo(self.Envelope[0], self.Vertices[i])
             self.Envelope[1] = ObtemMaximo(self.Envelope[1], self.Vertices[i])
+
+    # **********************************************************************
+    # CalculaOBB()
+    #      Calcula a Oriented Bounding Box (OBB) alinhando-se com a maior
+    #      aresta do triângulo.
+    # **********************************************************************
+    def CalculaOBB(self):
+        # Encontra a maior aresta para definir o eixo principal da OBB
+        max_dist_sq = -1
+        idx_a, idx_b = 0, 1
+
+        for i in range(3):
+            j = (i + 1) % 3
+            dx = self.Vertices[j].x - self.Vertices[i].x
+            dy = self.Vertices[j].y - self.Vertices[i].y
+            dist_sq = dx * dx + dy * dy
+            if dist_sq > max_dist_sq:
+                max_dist_sq = dist_sq
+                idx_a, idx_b = i, j
+
+        # Vetor diretor u (eixo longo) e vetor v (perpendicular)
+        ax = self.Vertices[idx_b].x - self.Vertices[idx_a].x
+        ay = self.Vertices[idx_b].y - self.Vertices[idx_a].y
+        comprimento = math.sqrt(ax * ax + ay * ay)
+
+        if comprimento < 1e-6:
+            ux, uy = 1.0, 0.0
+        else:
+            ux, uy = ax / comprimento, ay / comprimento
+
+        vx, vy = -uy, ux  # Vetor perpendicular
+
+        # Projeta os 3 vértices nos eixos u e v para encontrar min/max
+        min_u, max_u = float('inf'), float('-inf')
+        min_v, max_v = float('inf'), float('-inf')
+
+        for vert in self.Vertices:
+            proj_u = vert.x * ux + vert.y * uy
+            proj_v = vert.x * vx + vert.y * vy
+
+            min_u = min(min_u, proj_u)
+            max_u = max(max_u, proj_u)
+            min_v = min(min_v, proj_v)
+            max_v = max(max_v, proj_v)
+
+        # Reconstrói os 4 cantos da OBB no espaço global 2D
+        # Canto 1: min_u, min_v
+        # Canto 2: max_u, min_v
+        # Canto 3: max_u, max_v
+        # Canto 4: min_u, max_v
+        self.OBBVertices = [
+            Ponto(min_u * ux + min_v * vx, min_u * uy + min_v * vy),
+            Ponto(max_u * ux + min_v * vx, max_u * uy + min_v * vy),
+            Ponto(max_u * ux + max_v * vx, max_u * uy + max_v * vy),
+            Ponto(min_u * ux + max_v * vx, min_u * uy + max_v * vy)
+        ]
+
     # **********************************************************************
     # setCor(C)
     #      Define a cor do triangulo.
@@ -107,16 +164,54 @@ class Triangulo:
         glEnd()
 
     # **********************************************************************
-    # DesenhaEnvelope()
-    #      Desenha o envelope (AABB) do triangulo.
+    # DesenhaAABB()
+    #      Desenha o envelope alinhado aos eixos (AABB) do triangulo em vermelho.
     # **********************************************************************
-    def DesenhaEnvelope(self):
+    def DesenhaAABB(self):
+        defineCor(Red)
+        glLineWidth(2)
         glBegin(GL_LINE_LOOP)
         glVertex2f(self.Envelope[0].x, self.Envelope[0].y)
         glVertex2f(self.Envelope[1].x, self.Envelope[0].y)
         glVertex2f(self.Envelope[1].x, self.Envelope[1].y)
         glVertex2f(self.Envelope[0].x, self.Envelope[1].y)
         glEnd()
+        glLineWidth(1)
+
+    # **********************************************************************
+    # DesenhaEnvelope()
+    #      Mantido por compatibilidade. Chamada para DesenhaAABB.
+    # **********************************************************************
+    def DesenhaEnvelope(self):
+        self.DesenhaAABB()
+
+    # **********************************************************************
+    # DesenhaOBB()
+    #      Desenha a Oriented Bounding Box (OBB) do triangulo em azul.
+    # **********************************************************************
+    def DesenhaOBB(self):
+        defineCor(Blue)
+        glLineWidth(2)
+        glBegin(GL_LINE_LOOP)
+        for p in self.OBBVertices:
+            glVertex2f(p.x, p.y)
+        glEnd()
+        glLineWidth(1)
+
+    # **********************************************************************
+    # DesenhaCoberturaConvexa()
+    #      Desenha a Cobertura Convexa (Convex Hull) em verde.
+    #      Para um triângulo 2D, a Cobertura Convexa é o próprio contorno.
+    # **********************************************************************
+    def DesenhaCoberturaConvexa(self):
+        defineCor(Green)
+        glLineWidth(2)
+        glBegin(GL_LINE_LOOP)
+        glVertex2f(self.Vertices[0].x, self.Vertices[0].y)
+        glVertex2f(self.Vertices[1].x, self.Vertices[1].y)
+        glVertex2f(self.Vertices[2].x, self.Vertices[2].y)
+        glEnd()
+        glLineWidth(1)
 
     # **********************************************************************
     # getVertices(i=None)

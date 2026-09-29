@@ -19,8 +19,6 @@ from OpenGL.GLU import *
 from ListaDeCoresRGB import *
 
 from Ponto import *
-
-from ListaDeCoresRGB import *
 from Triangulo import Triangulo
 
 # Limites logicos da area de desenho
@@ -38,6 +36,11 @@ FoiClicado = False
 imprimeMat = False
 
 Triangulos = []
+
+# Controle de exibição das Bounding Boxes / Envelopes
+exibeAABB = False
+exibeOBB = False
+exibeCoberturaConvexa = False
 
 
 # **********************************************************************
@@ -122,8 +125,8 @@ def animate():
         print ("Tempo Acumulado: ", TempoTotal," segundos. ")
         print ("Nros de Frames sem desenho: ", nFrames)
         print ("FPS(sem desenho): ", nFrames/TempoTotal)
-        TempoTotal = 0;
-        nFrames = 0;
+        TempoTotal = 0
+        nFrames = 0
 
 # **********************************************************************
 # reshape(w, h)
@@ -184,11 +187,17 @@ def RotacionaAoRedorDeUmPonto(alfa, P):
 
 # **********************************************************************
 # DesenhaTriangulos()
-#      Desenha todos os triangulos armazenados na lista Triangulos.
+#      Desenha todos os triangulos e suas bounding boxes ativas.
 # **********************************************************************
 def DesenhaTriangulos():
     for T in Triangulos:
         T.Desenha()
+        if exibeAABB:
+            T.DesenhaAABB()
+        if exibeOBB:
+            T.DesenhaOBB()
+        if exibeCoberturaConvexa:
+            T.DesenhaCoberturaConvexa()
 
 
 # **********************************************************************
@@ -293,13 +302,32 @@ def Mouse(button, state, x, y):
 # **********************************************************************
 ESCAPE = b'\x1b'
 def keyboard(*args):
-    
-    print (args)
-    # If escape is pressed, kill everything.
-    if args[0] == b'q':
+    global exibeAABB, exibeOBB, exibeCoberturaConvexa
+
+    print(args)
+    key = args[0]
+
+    # Teclas para alternar a exibição das Bounding Boxes
+    if key == b'1':
+        exibeAABB = not exibeAABB
+        print("Exibir AABB (Vermelho):", exibeAABB)
+    elif key == b'2':
+        exibeOBB = not exibeOBB
+        print("Exibir OBB (Azul):", exibeOBB)
+    elif key == b'3':
+        exibeCoberturaConvexa = not exibeCoberturaConvexa
+        print("Exibir Cobertura Convexa (Verde):", exibeCoberturaConvexa)
+    elif key == b'0':
+        exibeAABB = False
+        exibeOBB = False
+        exibeCoberturaConvexa = False
+        print("Todas as Bounding Boxes ocultadas.")
+
+    # Se a tecla ESC ou 'q' for pressionada, encerra o programa.
+    if key == b'q' or key == ESCAPE:
         os._exit(0)
-    if args[0] == ESCAPE:
-        os._exit(0)
+
+    glutPostRedisplay()
 
 
 # **********************************************************************
@@ -325,7 +353,7 @@ def arrow_keys(a_keys: int, x: int, y: int):
 # **********************************************************************
 glutInit(sys.argv)
 
-glutInitDisplayMode(GLUT_RGBA|GLUT_DEPTH | GLUT_RGB)
+glutInitDisplayMode(GLUT_RGBA | GLUT_DEPTH | GLUT_RGB)
 # Define o tamanho inicial da janela grafica do programa
 glutInitWindowSize(1000, 500)
 
@@ -336,14 +364,14 @@ glutInitWindowPosition(100, 100)
 wind = glutCreateWindow(b"Trabalho 1 - Triangulos")
 
 # executa algumas inicializacoes
-init ()
+init()
 
 # Define que o tratador de evento para
 # o redesenho da tela. A funcao "display"
 # serah chamada automaticamente quando
 # for necessario redesenhar a janela
 glutDisplayFunc(display)
-glutIdleFunc (animate)
+glutIdleFunc(animate)
 
 # o redimensionamento da janela. A funcao "reshape"
 # Define que o tratador de evento para
@@ -369,6 +397,6 @@ glutMouseFunc(Mouse)
 #glutMotionFunc(mouseMove)
 
 try:
-	glutMainLoop()
+    glutMainLoop()
 except SystemExit:
-	pass
+    pass
